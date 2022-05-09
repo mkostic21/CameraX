@@ -79,7 +79,10 @@ class PhotoActivity : AppCompatActivity() {
         isReversedHorizontal = lensFacing == CameraX.LensFacing.FRONT
     }
 
-    private fun setClickListeners() {}
+    private fun setClickListeners() {
+        toggleCameraLens.setOnClickListener { toggleFrontBackCamera() }
+    }
+
 
     private fun requestPermissions() {
             if (allPermissionsGranted()) {
@@ -221,6 +224,15 @@ class PhotoActivity : AppCompatActivity() {
                 setCaptureMode(ImageCapture.CaptureMode.MAX_QUALITY)
             }
         return ImageCapture(imageCaptureConfig.build())
+    }
+
+    private fun toggleFrontBackCamera() {
+        lensFacing = if (lensFacing == CameraX.LensFacing.BACK) {
+            CameraX.LensFacing.FRONT
+        } else {
+            CameraX.LensFacing.BACK
+        }
+        previewView.post { startCamera() }
     }
 
 
