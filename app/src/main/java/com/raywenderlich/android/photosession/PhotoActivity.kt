@@ -42,6 +42,7 @@ import android.view.Surface
 import com.raywenderlich.android.photosession.ImagePopupView.Companion.ALPHA_TRANSPARENT
 import com.raywenderlich.android.photosession.ImagePopupView.Companion.FADING_ANIMATION_DURATION
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
@@ -81,16 +82,20 @@ class PhotoActivity : AppCompatActivity() {
 
     private fun setClickListeners() {
         toggleCameraLens.setOnClickListener { toggleFrontBackCamera() }
+        previewView.setOnClickListener { takePicture() }
     }
 
 
+
     private fun requestPermissions() {
-            if (allPermissionsGranted()) {
-                previewView.post { startCamera() }
-            } else {
-                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS,
-                    REQUEST_CODE_PERMISSIONS)
-            }
+        if (allPermissionsGranted()) {
+            previewView.post { startCamera() }
+        } else {
+            ActivityCompat.requestPermissions(
+                this, REQUIRED_PERMISSIONS,
+                REQUEST_CODE_PERMISSIONS
+            )
+        }
     }
 
     private fun createImagePopup(
@@ -233,6 +238,50 @@ class PhotoActivity : AppCompatActivity() {
             CameraX.LensFacing.BACK
         }
         previewView.post { startCamera() }
+    }
+
+    private fun takePicture() {
+        disableActions()
+        if (saveImageSwitch.isChecked) {
+            savePictureToFile()
+        } else {
+            savePictureToMemory()
+        }
+    }
+
+    private fun savePictureToFile() {}
+
+    private fun savePictureToMemory() {
+        imageCapture?.takePicture(executor,
+            object : ImageCapture.OnImageCapturedListener() {
+                override fun onError(
+                    error: ImageCapture.ImageCaptureError,
+                    message: String, exc: Throwable?
+                ) {
+                    Toast.makeText(
+                        this@PhotoActivity,
+                        getString(R.string.image_save_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                override fun onCaptureSuccess(
+                    imageProxy: ImageProxy?,
+                    rotationDegrees: Int
+                ) {
+                    imageProxy?.image?.let {
+                        val bitmap = rotateImage(
+                            imageToBitmap(it),
+                            rotationDegrees.toFloat()
+                        )
+                        runOnUiThread {
+                            takenImage.setImageBitmap(bitmap)
+                            enableActions()
+                        }
+                    }
+                    super.onCaptureSuccess(imageProxy, rotationDegrees)
+                }
+            })
     }
 
 
