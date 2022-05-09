@@ -38,6 +38,7 @@ import android.graphics.Matrix
 import android.graphics.drawable.Drawable
 import android.media.Image
 import android.os.Bundle
+import android.view.Surface
 import com.raywenderlich.android.photosession.ImagePopupView.Companion.ALPHA_TRANSPARENT
 import com.raywenderlich.android.photosession.ImagePopupView.Companion.FADING_ANIMATION_DURATION
 import android.view.ViewGroup
@@ -51,125 +52,176 @@ import java.util.concurrent.Executors
 
 class PhotoActivity : AppCompatActivity() {
 
-  companion object {
-    private const val REQUEST_CODE_PERMISSIONS = 10
+    companion object {
+        private const val REQUEST_CODE_PERMISSIONS = 10
 
-    private val REQUIRED_PERMISSIONS = arrayOf(
-        Manifest.permission.CAMERA,
-        Manifest.permission.WRITE_EXTERNAL_STORAGE
-    )
-  }
-
-  private val fileUtils: FileUtils by lazy { FileUtilsImpl() }
-  private val executor: Executor by lazy { Executors.newSingleThreadExecutor() }
-
-  private var imageCapture: ImageCapture? = null
-  private var imagePopupView: ImagePopupView? = null
-  private var lensFacing = CameraX.LensFacing.BACK
-
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    setContentView(R.layout.activity_photo)
-    setClickListeners()
-    requestPermissions()
-  }
-
-  private fun getMetadata() = ImageCapture.Metadata().apply {
-    isReversedHorizontal = lensFacing == CameraX.LensFacing.FRONT
-  }
-
-  private fun setClickListeners() {}
-
-  private fun requestPermissions() {
-    if (allPermissionsGranted()) {
-
-    } else {
-      ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-    }
-  }
-
-  private fun createImagePopup(
-      imageDrawable: Drawable,
-      backgroundClickAction: () -> Unit
-  ) =
-      ImagePopupView.builder(this)
-          .imageDrawable(imageDrawable)
-          .onBackgroundClickAction(backgroundClickAction)
-          .build()
-
-  private fun removeImagePopup() {
-    imagePopupView?.let {
-      it.animate()
-          .alpha(ALPHA_TRANSPARENT)
-          .setDuration(FADING_ANIMATION_DURATION)
-          .withEndAction {
-            rootView.removeView(it)
-          }
-          .start()
-    }
-  }
-
-  private fun showImagePopup() {
-    if (takenImage.drawable == null) {
-      return
-    }
-    createImagePopup(takenImage.drawable) { removeImagePopup() }
-        .let {
-          imagePopupView = it
-          addImagePopupViewToRoot(it)
-        }
-  }
-
-  private fun addImagePopupViewToRoot(imagePopupView: ImagePopupView) {
-    rootView.addView(
-        imagePopupView,
-        ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
+        private val REQUIRED_PERMISSIONS = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
-    )
-  }
-
-  private fun rotateImage(source: Bitmap, angle: Float): Bitmap {
-    val matrix = Matrix()
-    matrix.postRotate(angle)
-    return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
-  }
-
-  private fun imageToBitmap(image: Image): Bitmap {
-    val buffer = image.planes[0].buffer
-    val bytes = ByteArray(buffer.capacity())
-    buffer.get(bytes)
-    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, null)
-  }
-
-  private fun disableActions() {
-    previewView.isClickable = false
-    takenImage.isClickable = false
-    toggleCameraLens.isClickable = false
-    saveImageSwitch.isClickable = false
-  }
-
-  private fun enableActions() {
-    previewView.isClickable = true
-    takenImage.isClickable = true
-    toggleCameraLens.isClickable = true
-    saveImageSwitch.isClickable = true
-  }
-
-  override fun onRequestPermissionsResult(
-      requestCode: Int, permissions: Array<String>, grantResults: IntArray
-  ) {
-    if (requestCode == REQUEST_CODE_PERMISSIONS) {
-      if (allPermissionsGranted()) {
-
-      } else {
-        finish()
-      }
     }
-  }
 
-  private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
-    ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
-  }
+    private val fileUtils: FileUtils by lazy { FileUtilsImpl() }
+    private val executor: Executor by lazy { Executors.newSingleThreadExecutor() }
+
+    private var imageCapture: ImageCapture? = null
+    private var imagePopupView: ImagePopupView? = null
+    private var lensFacing = CameraX.LensFacing.BACK
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_photo)
+        setClickListeners()
+        requestPermissions()
+    }
+
+    private fun getMetadata() = ImageCapture.Metadata().apply {
+        isReversedHorizontal = lensFacing == CameraX.LensFacing.FRONT
+    }
+
+    private fun setClickListeners() {}
+
+    private fun requestPermissions() {
+            if (allPermissionsGranted()) {
+                previewView.post { startCamera() }
+            } else {
+                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS,
+                    REQUEST_CODE_PERMISSIONS)
+            }
+    }
+
+    private fun createImagePopup(
+        imageDrawable: Drawable,
+        backgroundClickAction: () -> Unit
+    ) =
+        ImagePopupView.builder(this)
+            .imageDrawable(imageDrawable)
+            .onBackgroundClickAction(backgroundClickAction)
+            .build()
+
+    private fun removeImagePopup() {
+        imagePopupView?.let {
+            it.animate()
+                .alpha(ALPHA_TRANSPARENT)
+                .setDuration(FADING_ANIMATION_DURATION)
+                .withEndAction {
+                    rootView.removeView(it)
+                }
+                .start()
+        }
+    }
+
+    private fun showImagePopup() {
+        if (takenImage.drawable == null) {
+            return
+        }
+        createImagePopup(takenImage.drawable) { removeImagePopup() }
+            .let {
+                imagePopupView = it
+                addImagePopupViewToRoot(it)
+            }
+    }
+
+    private fun addImagePopupViewToRoot(imagePopupView: ImagePopupView) {
+        rootView.addView(
+            imagePopupView,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+    }
+
+    private fun rotateImage(source: Bitmap, angle: Float): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(angle)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+    }
+
+    private fun imageToBitmap(image: Image): Bitmap {
+        val buffer = image.planes[0].buffer
+        val bytes = ByteArray(buffer.capacity())
+        buffer.get(bytes)
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, null)
+    }
+
+    private fun disableActions() {
+        previewView.isClickable = false
+        takenImage.isClickable = false
+        toggleCameraLens.isClickable = false
+        saveImageSwitch.isClickable = false
+    }
+
+    private fun enableActions() {
+        previewView.isClickable = true
+        takenImage.isClickable = true
+        toggleCameraLens.isClickable = true
+        saveImageSwitch.isClickable = true
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<String>, grantResults: IntArray
+    ) {
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                previewView.post { startCamera() }
+            } else {
+                finish()
+            }
+        }
+    }
+
+
+    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun startCamera() {
+        CameraX.unbindAll()
+        val preview = createPreviewUseCase()
+        preview.setOnPreviewOutputUpdateListener {
+            val parent = previewView.parent as ViewGroup
+            parent.removeView(previewView)
+            parent.addView(previewView, 0)
+            previewView.surfaceTexture = it.surfaceTexture
+            updateTransform()
+        }
+        imageCapture = createCaptureUseCase()
+        CameraX.bindToLifecycle(this, preview, imageCapture)
+    }
+
+    private fun createPreviewUseCase(): Preview {
+        val previewConfig = PreviewConfig.Builder().apply {
+            setLensFacing(lensFacing)
+            setTargetRotation(previewView.display.rotation)
+        }.build()
+        return Preview(previewConfig)
+    }
+
+    private fun updateTransform() {
+        val matrix = Matrix()
+        val centerX = previewView.width / 2f
+        val centerY = previewView.height / 2f
+        val rotationDegrees = when (previewView.display.rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> return
+        }
+        matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
+        previewView.setTransform(matrix)
+    }
+
+    private fun createCaptureUseCase(): ImageCapture {
+        val imageCaptureConfig = ImageCaptureConfig.Builder()
+            .apply {
+                setLensFacing(lensFacing)
+                setTargetRotation(previewView.display.rotation)
+                setCaptureMode(ImageCapture.CaptureMode.MAX_QUALITY)
+            }
+        return ImageCapture(imageCaptureConfig.build())
+    }
+
+
 }
